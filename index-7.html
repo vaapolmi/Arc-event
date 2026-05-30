@@ -1,0 +1,1086 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>EventMap: Past & Future</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+  <link rel="icon" href="gg.jpg" sizes="any">
+
+  <style>
+    :root{
+      --bg:#f7f7fb;
+      --panel:#ffffff;
+      --text:#0f172a;
+      --muted:#6b7280;
+      --brand:#3b82f6;
+      --brand-2:#60a5fa;
+      --line:#ececf3;
+      --chip:#eef2ff;
+      --shadow: 0 10px 30px rgba(15,23,42,.08);
+      --radius: 18px;
+
+      --future-bg:#e6fbf3; --future-bd:#a7f3d0; --future-tx:#065f46;
+      --past-bg:#ffecec;  --past-bd:#fecaca;  --past-tx:#7f1d1d;
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;margin:0}
+    body{
+      font-family: Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
+      color:var(--text);
+      background:
+        radial-gradient(1200px 1200px at 85% 10%, #ffffff 0%, #f3f6ff 50%, #eef2ff 100%),
+        var(--bg);
+      overflow:hidden;
+      direction: ltr;
+    }
+
+    #splash{
+      position:fixed; inset:0;
+      display:flex; align-items:center; justify-content:center;
+      background:#ffffff; 
+      z-index:99999;
+    }
+    #splash img{
+      width:min(40vmin, 240px); 
+      height:auto;
+      display:block;
+      user-select:none;
+      -webkit-user-drag:none;
+      image-rendering:auto;
+      filter: drop-shadow(0 12px 30px rgba(0,0,0,.12));
+    }
+    .fade-out{
+      animation: splashFade .5s ease forwards;
+    }
+    @keyframes splashFade{
+      to{ opacity:0; visibility:hidden; }
+    }
+
+    #site{ display:none; } 
+
+    #app{
+      position:fixed; inset:16px;
+      display:grid;
+      grid-template-columns: 1fr min(420px, 35vw); /* map | right panel */
+      gap:16px;
+    }
+    #app.full{ grid-template-columns: 1fr; }
+
+    #map{
+      width:100%; height:100%;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      outline:1px solid var(--line);
+      overflow:hidden;
+    }
+
+    .brandbar{
+      position:fixed; left:32px; top:24px; z-index:1000;
+      display:flex; align-items:center; gap:10px;
+      padding:10px 14px; background:rgba(255,255,255,.9);
+      backdrop-filter: blur(6px); border:1px solid var(--line);
+      border-radius: 999px; box-shadow: var(--shadow);
+    }
+    .logo{ width:26px;height:26px;border-radius:8px; background:linear-gradient(135deg,var(--brand),var(--brand-2)); box-shadow: inset 0 0 0 2px rgba(255,255,255,.5); }
+    .brandbar h1{ font-size:14px; margin:0; font-weight:600; }
+
+    .wallet-btn{
+      position:fixed; left:32px; bottom:24px; z-index:1000;
+      padding:11px 20px; border:none;
+      background: linear-gradient(135deg, var(--brand), var(--brand-2));
+      color:#fff; font-weight:600; font-size:13px;
+      border-radius:999px; cursor:pointer;
+      box-shadow: var(--shadow);
+      transition: transform .15s ease;
+      font-family: inherit;
+      display:inline-flex; align-items:center; gap:6px;
+    }
+    .wallet-btn::before{
+      content:"👛"; font-size:14px;
+    }
+    .wallet-btn:hover{ transform: translateY(-1px); }
+    .wallet-btn.connected{ background:#10b981; }
+    .wallet-btn.connected::before{ content:"✓"; }
+
+    @media (max-width: 980px){
+      .wallet-btn{
+        left:50%; transform:translateX(-50%);
+        bottom:18px; font-size:12px; padding:10px 16px;
+      }
+      .wallet-btn:hover{ transform:translateX(-50%) translateY(-1px); }
+    }
+
+    .mint-section{
+      margin-top:12px; padding-top:12px;
+      border-top:1px dashed var(--line);
+    }
+    .mint-btn{
+      width:100%; padding:11px;
+      background: linear-gradient(135deg, var(--brand), var(--brand-2));
+      color:#fff; font-weight:600; font-size:13px;
+      border:none; border-radius:12px; cursor:pointer;
+      transition: transform .15s ease, opacity .15s ease;
+      font-family: inherit;
+      display:flex; align-items:center; justify-content:center; gap:8px;
+    }
+    .mint-btn:hover:not(:disabled){ transform: translateY(-1px); }
+    .mint-btn:disabled{ opacity:.6; cursor:not-allowed; }
+    .mint-btn .ticket-icon{ font-size:16px; }
+    .mint-status{
+      margin-top:8px; font-size:12px; color:var(--muted);
+      text-align:center; min-height:16px;
+    }
+    .mint-status.success{ color:#065f46; font-weight:600; }
+    .mint-status.error{ color:#7f1d1d; }
+    .mint-note{
+      margin-top:6px; font-size:11px; color:var(--muted);
+      text-align:center; font-style:italic;
+    }
+
+    .panel{
+      position:relative; height:100%; background:var(--panel);
+      border-radius: var(--radius); box-shadow: var(--shadow);
+      border:1px solid var(--line); display:flex; flex-direction:column; overflow:hidden;
+    }
+    .panel-header{ padding:16px 16px 12px 16px; border-bottom:1px solid var(--line); display:flex; align-items:center; gap:10px; }
+    .search{ flex:1; position:relative; }
+    .search input{
+      width:100%; padding:12px 14px 12px 38px; border:1px solid var(--line); border-radius:12px; outline:none;
+      background:#fbfbff; color:#0f172a; font: 500 14px/1 Inter, sans-serif;
+    }
+    .search .icon{ position:absolute; left:10px; top:50%; transform:translateY(-50%); font-size:14px; color:var(--muted); }
+    .filters{ padding:10px 16px; display:flex; gap:8px; align-items:center; flex-wrap:wrap; border-bottom:1px solid var(--line); }
+    .chip{ border:1px solid var(--line); background:var(--chip); color:#3730a3; padding:8px 10px; border-radius:999px; font-weight:600; font-size:12px; cursor:pointer; user-select:none; }
+    .chip[aria-pressed="true"]{ background:#dbeafe; color:#1d4ed8; border-color:#c7d2fe; }
+    .stats{ margin-left:auto; color:var(--muted); font-size:12px; }
+
+    .list{ overflow:auto; padding:8px 10px 16px 16px; display:grid; gap:10px; }
+    .card{
+      min-height: 80px; 
+      display:grid; grid-template-columns: 80px 1fr; background:#fff; border:1px solid var(--line);
+      border-radius:14px; overflow:hidden; transition: transform .12s ease, box-shadow .12s ease; cursor:pointer;
+    }
+    .card:hover{ transform: translateY(-1px); box-shadow: 0 8px 20px rgba(15,23,42,.06); }
+    .thumb{ width:100%; height:100%; object-fit:cover; aspect-ratio:1/1; border-radius:0; }
+    .card-body{ padding:10px 12px; display:grid; gap:6px; align-content:center; }
+    .title{ font-size:14px; font-weight:700; letter-spacing:.2px; }
+    .meta{ font-size:12px; color:var(--muted); display:flex; gap:8px; flex-wrap:wrap; }
+    .badge{ padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; letter-spacing:.2px; background:#e5f6f1; color:#065f46; border:1px solid #ccf0e6; }
+    .badge.past{ background:#fee2e2; color:#991b1b; border-color:#fecaca; }
+
+    .footer{ margin-top:auto; padding:12px 14px; border-top:1px solid var(--line); display:flex; align-items:center; gap:10px; color:var(--muted); font-size:12px; }
+    .footer .dot{ width:8px;height:8px;border-radius:50%; background:linear-gradient(135deg,var(--brand),var(--brand-2)); box-shadow:0 0 0 3px #e0ecff; }
+
+    .toggle{
+      position:fixed; right:26px; top:24px; z-index:1000;
+      padding:10px 12px; border-radius:999px; border:1px solid var(--line);
+      background:rgba(255,255,255,.95); backdrop-filter: blur(6px);
+      box-shadow: var(--shadow); cursor:pointer; font-weight:700; font-size:12px;
+    }
+    .toggle[aria-pressed="true"]::after{ content:" Show list"; }
+    .toggle[aria-pressed="false"]::after{ content:" Hide list"; }
+
+    .reset{
+      position:fixed; right:26px; top:70px; z-index:1000;
+      padding:10px 12px; border-radius:999px; border:1px solid var(--line);
+      background:rgba(255,255,255,.95); backdrop-filter: blur(6px);
+      box-shadow: var(--shadow); cursor:pointer; font-weight:700; font-size:12px;
+      transition: opacity .15s ease, transform .15s ease;
+    }
+    .reset.hidden{ opacity:0; pointer-events:none; transform: translateY(-6px); }
+
+    /* Leaflet UI */
+    .leaflet-control-zoom a{ border-radius:10px !important; border:1px solid var(--line) !important; background:#fff !important; box-shadow: var(--shadow); }
+    .leaflet-popup-content-wrapper{ border-radius:12px; border:1px solid var(--line); }
+
+    .popup{ display:grid; gap:8px; }
+    .popup img{ width:100%; height:120px; object-fit:cover; border-radius:10px; }
+    .popup h3{ margin:0; font-size:14px; }
+    .popup .small{ color:var(--muted); font-size:12px; }
+    .popup .pill{ display:inline-block; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:700; }
+    .popup .pill.future{ background:#d1fae5; color:#065f46; border:1px solid #a7f3d0; }
+    .popup .pill.past{ background:#fee2e2; color:#991b1b; border:1px solid #fecaca; }
+
+    .ev-marker{
+      position:relative;
+      display:flex; flex-direction:column; align-items:center; gap:6px;
+      width:72px; background:transparent; border:none;
+      transform: translateY(-6px);
+      pointer-events:auto; user-select:none;
+    }
+    .ev-marker .img-wrap{
+      width:44px; height:44px; border-radius:9999px; overflow:hidden;
+      border:2px solid; box-shadow: 0 6px 16px rgba(15,23,42,.18);
+      display:flex; align-items:center; justify-content:center; background:#fff;
+    }
+    .ev-marker.future .img-wrap{ border-color: var(--future-bd); background: var(--future-bg); }
+    .ev-marker.past   .img-wrap{ border-color: var(--past-bd);   background: var(--past-bg); }
+    .ev-marker img.img{ width:100%; height:100%; object-fit:cover; display:block; }
+
+    .ev-marker .city{
+      max-width: 100%;
+      padding:3px 8px; border-radius:9999px;
+      font-size:11px; font-weight:700; line-height:1;
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+      border:1px solid;
+    }
+    .ev-marker.future .city{ color:var(--future-tx); background:var(--future-bg); border-color:var(--future-bd); }
+    .ev-marker.past   .city{ color:var(--past-tx);   background:var(--past-bg);   border-color:var(--past-bd); }
+
+    .ev-marker::after{
+      content:""; position:absolute; left:50%; bottom:-6px; transform: translateX(-50%) rotate(45deg);
+      width:8px; height:8px; border:1px solid; background:#fff;
+    }
+    .ev-marker.future::after{ background: var(--future-bg); border-color: var(--future-bd); }
+    .ev-marker.past::after{   background: var(--past-bg);   border-color: var(--past-bd); }
+
+    /* ===== Beautiful Cluster Markers ===== */
+    .marker-cluster-custom{
+      background: transparent !important;
+      border: none !important;
+    }
+    .ev-cluster{
+      position: relative;
+      width: 56px; height: 56px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      color: #fff;
+      font-weight: 800;
+      font-size: 15px;
+      font-family: Inter, sans-serif;
+      background: linear-gradient(135deg, #3b82f6, #6366f1);
+      box-shadow: 0 8px 24px rgba(59,130,246,.45), 0 0 0 4px rgba(255,255,255,.85);
+      cursor: pointer;
+      transition: transform .18s ease, box-shadow .18s ease;
+    }
+    .ev-cluster::before{
+      content: ""; position: absolute; inset: -6px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(99,102,241,.25), transparent 70%);
+      animation: pulse 2.2s ease-in-out infinite;
+      z-index: -1;
+    }
+    .ev-cluster:hover{
+      transform: scale(1.08);
+      box-shadow: 0 12px 30px rgba(59,130,246,.55), 0 0 0 4px rgba(255,255,255,.95);
+    }
+    .ev-cluster.mixed{ background: linear-gradient(135deg, #8b5cf6, #6366f1); }
+    .ev-cluster.all-past{
+      background: linear-gradient(135deg, #ef4444, #b91c1c);
+      box-shadow: 0 8px 24px rgba(239,68,68,.45), 0 0 0 4px rgba(255,255,255,.85);
+    }
+    .ev-cluster.all-future{
+      background: linear-gradient(135deg, #10b981, #059669);
+      box-shadow: 0 8px 24px rgba(16,185,129,.45), 0 0 0 4px rgba(255,255,255,.85);
+    }
+    .ev-cluster .count-badge{
+      position: absolute; top: -6px; right: -6px;
+      min-width: 22px; height: 22px; padding: 0 6px;
+      border-radius: 999px;
+      background: #fff; color: #0f172a;
+      font-size: 11px; font-weight: 800;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 3px 8px rgba(0,0,0,.18);
+      border: 1.5px solid rgba(15,23,42,.06);
+    }
+    @keyframes pulse{
+      0%, 100%{ transform: scale(1); opacity: .8; }
+      50%{ transform: scale(1.15); opacity: .4; }
+    }
+
+    /* Same-location marker stack: small indicator badge */
+    .ev-marker .stack-badge{
+      position: absolute; top: -4px; right: 6px;
+      min-width: 20px; height: 20px; padding: 0 5px;
+      border-radius: 999px;
+      background: #0f172a; color: #fff;
+      font-size: 10px; font-weight: 800;
+      display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 3px 8px rgba(0,0,0,.25);
+      border: 1.5px solid #fff;
+      z-index: 2;
+    }
+
+    /* Multi-event popup (when clicking a cluster of co-located events) */
+    .popup-multi{
+      display: grid; gap: 8px;
+      max-height: 320px; overflow-y: auto;
+      padding-right: 4px;
+    }
+    .popup-multi h4{
+      margin: 0 0 4px 0; font-size: 13px; color: var(--muted);
+      font-weight: 600; letter-spacing: .3px;
+    }
+    .popup-multi .mini-card{
+      display: grid; grid-template-columns: 52px 1fr;
+      gap: 10px; padding: 8px; border-radius: 10px;
+      border: 1px solid var(--line); background: #fff;
+      cursor: pointer; transition: all .15s ease;
+      align-items: center;
+    }
+    .popup-multi .mini-card:hover{
+      border-color: var(--brand);
+      background: #f8faff;
+      transform: translateX(2px);
+    }
+    .popup-multi .mini-card img{
+      width: 52px; height: 52px; border-radius: 8px;
+      object-fit: cover;
+    }
+    .popup-multi .mini-card .mini-title{
+      font-size: 13px; font-weight: 700; line-height: 1.25;
+      color: var(--text);
+      display: -webkit-box; -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical; overflow: hidden;
+    }
+    .popup-multi .mini-card .mini-meta{
+      display: flex; align-items: center; gap: 6px;
+      margin-top: 4px; font-size: 11px; color: var(--muted);
+    }
+    .popup-multi .mini-card .mini-pill{
+      padding: 1px 7px; border-radius: 999px;
+      font-size: 10px; font-weight: 700;
+    }
+    .popup-multi .mini-card .mini-pill.future{ background:#d1fae5; color:#065f46; }
+    .popup-multi .mini-card .mini-pill.past{ background:#fee2e2; color:#991b1b; }
+    .leaflet-popup-content{ margin: 12px 14px !important; min-width: 240px; }
+
+    @media (max-width: 980px){
+      #app{ grid-template-columns: 1fr; }
+      .panel{
+        position:fixed; right:16px; top:66px; bottom:16px; width:min(440px, 92vw);
+        transform: translateX(0);
+        transition: transform .2s ease;
+        z-index:900;
+      }
+      .panel.hidden{ transform: translateX(calc(100% + 16px)); }
+    }
+    @media (min-width: 981px){
+      .panel.hidden{ display:none; }
+    }
+.panel-hero{
+  display:flex; align-items:center; gap:10px;
+  padding:12px 16px;
+  border-bottom:1px solid var(--line);
+  background:#fff;
+}
+.panel-hero .hero-img{
+  width:40px; height:40px; border-radius:10px; object-fit:cover;
+  border:1px solid var(--line);
+  box-shadow: 0 4px 10px rgba(15,23,42,.06);
+}
+.panel-hero .hero-text{
+  font-size:14px; font-weight:700; color:var(--text);
+  line-height:1.2;
+}
+.panel-hero .hero-sub{
+  font-size:12px; color:var(--muted); margin-top:2px;
+}
+.fab-avatar{
+  position: fixed;
+  left: 20px; bottom: 20px; right: auto;
+  z-index: 1100;
+  width: 56px; height: 56px;            
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid #fff;
+  background: #fff;                     
+  box-shadow: 0 10px 20px rgba(15,23,42,.18);
+  background-color: #7f1d1d;
+}
+
+.fab-avatar img{
+  width: 100%;
+  height: 100%;
+  object-fit: contain;                    
+  object-position: center;
+  display: block;
+  image-rendering: auto;
+}
+
+
+
+  </style>
+</head>
+<body>
+<a class="fab-avatar" href="#" aria-label="Floating image">
+  <img src="gg.jpg" alt="Avatar">
+</a>
+
+
+  <div id="splash" role="img" aria-label="Loading" >
+    <img  src="gg.jpg" style="border-radius: 50px;" alt="Loading..." />
+    <div>
+  </div>
+  </div>
+
+  <div id="site" aria-hidden="true">
+  
+    </div>
+
+    <button class="toggle" id="toggle" aria-pressed="false" aria-label="Toggle event list"></button>
+    <button class="reset hidden" id="reset" aria-label="Reset map view">Reset view</button>
+    <button class="wallet-btn" id="walletBtn" onclick="window.connectWallet()">Connect Wallet</button>
+
+    <div id="app" role="application" aria-label="Interactive map with event list">
+      <div id="map" role="region" aria-label="Map"></div>
+
+      <aside class="panel" id="panel" role="complementary" aria-label="Event List">
+        <div class="panel-header">
+          <div class="search">
+            <span class="icon" aria-hidden="true">🔎</span>
+            <input id="search" placeholder="Search events/places..." autocomplete="off" />
+          </div>
+        </div>
+        <div class="filters" role="group" aria-label="Filters">
+          <button class="chip" id="filter-all" aria-pressed="true">All</button>
+          <button class="chip" id="filter-future" aria-pressed="false">Upcoming</button>
+          <button class="chip" id="filter-past" aria-pressed="false">Past</button>
+          <div class="stats" id="stats">0 events</div>
+        </div>
+        <div class="panel-hero">
+          <img class="hero-img" src="gg.jpg" alt="Featured">
+          <div>
+            <div class="hero-text">ARC : World Event</div>
+            <div class="hero-sub">ARC season</div>
+          </div>
+        </div>
+        
+        <div class="list" id="list" role="list"></div>
+        <div class="footer">
+          <span class="dot" aria-hidden="true"></span>
+          <span>Tip: click a card to fly to the event.</span>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <script>
+    const SPLASH_DURATION = 500; 
+    const DEFAULT_CENTER = [48.1372, 11.5761]; // Munich
+    const DEFAULT_ZOOM   = 4;
+
+    const map = L.map('map', {
+      zoomControl: true,
+      attributionControl: true,
+      minZoom: 2,
+      maxZoom: 18,
+      worldCopyJump: false,
+      zoomSnap: .25,
+      maxBoundsViscosity: 0.85
+    }).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      attribution: '&copy; OpenStreetMap & CARTO',
+      subdomains: 'abcd',
+      maxZoom: 20,
+      noWrap: true
+    }).addTo(map);
+
+    document.addEventListener('contextmenu', (e)=> e.preventDefault(), {passive:false});
+    document.body.addEventListener('wheel', (e)=> { if(!e.ctrlKey) e.preventDefault(); }, {passive:false});
+
+    const EVENTS = [
+      { id:'e1', title:'ETHGlobal New York 2026', date:'2026-06-12', lat:40.7396, lng:-73.9936, city:'New York, USA', image:'https://cdn.gradual.com/images/https://d2xo500swnpgl1.cloudfront.net/uploads/arc/ETHGlobal-NYC-0aca1526-61cd-41fa-9e11-b67858dec5a6-1778302080550.jpeg?fit=scale-down&width=400', desc:'ETHGlobal New York is an in-person hackathon for builders exploring web3 technologies, protocols, and developer tools. Circle is supporting builders on Arc through sponsored bounty opportunities tied to Circle\u2019s developer platform. Expect 800+ attendees, 13+ protocols, and 29+ workshops. <br><a target="_blank" href="https://community.arc.io/home/events/ethglobal-new-york-2026-2wbc20jux8">Event Link</a>' },
+      { id:'e2', title:'Setting Up Your Full Agentic Stack', date:'2026-05-06', lat:25.7956, lng:-80.1340, city:'Miami Beach, USA', image:'https://cdn.gradual.com/images/https://d2xo500swnpgl1.cloudfront.net/uploads/arc/consensus-miami-4659185d-7646-4eae-960b-285649c56348-1777904357389.jpeg?fit=scale-down&width=400', desc:'Join Circle as they show you everything you need to run a full agentic stack to manage your finances \u2014 giving your agentic legion the ability to make purchases on your behalf. A workshop within the Consensus 2026 conference. <br><a target="_blank" href="https://community.arc.io/home/events/setting-up-your-full-agentic-stack-with-circle-consensus-2026-workshop-sb05znkwqf">Event Link</a>' },
+      { id:'e3', title:'AWS + Circle Present 2026', date:'2026-05-05', lat:25.7957, lng:-80.1341, city:'Miami Beach, USA', image:'https://cdn.gradual.com/images/https://d2xo500swnpgl1.cloudfront.net/uploads/arc/980ebf3a-25b0-41f9-887d-e478266359b7-1--b62099f6-e06f-4a61-a309-b9b1cb844a1d-1777903760101.jpeg?fit=scale-down&width=400', desc:'AWS and Circle explore real-time, usage-based digital economies. Discover how Nanopayments using USDC enable transactions as small as fractions of a cent \u2014 without the friction of traditional payment systems, secured by AWS Nitro Enclaves. No Consensus pass required. <br><a target="_blank" href="https://community.arc.io/home/events/aws-circle-present-agentic-nanopayments-at-consensus-2026-sjye5zctdv">Event Link</a>' },
+      { id:'e4', title:'Set Up Stablecoin Wallet & Dashboard ', date:'2026-05-05', lat:25.7958, lng:-80.1342, city:'Miami Beach, USA', image:'https://cdn.gradual.com/images/https://d2xo500swnpgl1.cloudfront.net/uploads/arc/consensus-miami-4659185d-7646-4eae-960b-285649c56348-1777904357389.jpeg?fit=scale-down&width=400', desc:'Join Circle developers as they walk you through how to set up a wallet, manage inflows and outflows, normalize crypto data for TradFi, and explore their forthcoming agent wallet and CLI for AI agents. A workshop within the Consensus 2026 conference. <br><a target="_blank" href="https://community.arc.io/home/events/how-to-set-up-stablecoin-wallet-and-dashboard-for-your-business-with-circle-us4hxwefux">Event Link</a>' },
+      { id:'e5', title:'Agentic Economy on Arc Hackathon', date:'2026-04-20', lat:37.7749, lng:-122.4194, city:'San Francisco, USA', image:'https://cdn.gradual.com/images/https://d2xo500swnpgl1.cloudfront.net/uploads/arc/compressed-high-quality-b1e68fac-6cd0-45ac-9220-74f3a0ab3a32-1773858841531.jpeg?fit=scale-down&width=400', desc:'A hybrid hackathon powered by Arc and Circle, building the next generation of Agentic economic applications using Circle\u2019s Nanopayments infrastructure with settlement on Arc in USDC. April 20\u201326, 2026 \u2014 compete for a $10,000 prize pool. <br><a target="_blank" href="https://community.arc.io/home/events/agentic-economy-on-arc-hackathon-xoayqenc6j">Event Link</a>' },
+      { id:'e6', title:'Agentic Economy on Arc Hackathon ', date:'2026-04-25', lat:37.7750, lng:-122.4195, city:'San Francisco, USA', image:'https://cdn.gradual.com/images/https://d2xo500swnpgl1.cloudfront.net/uploads/arc/compressed-high-quality-b668fe4c-e1f9-4941-b6f1-5cd7f9db6773-1773860375771.jpeg?fit=scale-down&width=400', desc:'The on-site finale of the global hybrid event on April 25\u201326, 2026 in San Francisco, CA. Backed by Circle and Arc, with a $10,000 prize pool, on-site pitching opportunities, and recognition for selected teams. <br><a target="_blank" href="https://community.arc.io/home/events/agentic-economy-on-arc-hackathon-irl-component-0y20rlyapb">Event Link</a>' },
+      { id:'e7', title:'ETHGlobal Cannes Hackathon', date:'2026-04-03', lat:43.5510, lng:7.0174, city:'Cannes, France', image:'https://cdn.gradual.com/images/https://d2xo500swnpgl1.cloudfront.net/uploads/arc/Screenshot-2026-03-17-at-2-09-29-PM-32bfbf9c-2267-4d5c-af1f-d6cb9125656f-1773770990524.jpeg?fit=scale-down&width=400', desc:'Experiment with cutting edge web3 technologies and develop an idea you\u2019re passionate about. As a sponsor, Arc is offering $15,000 in bounties for builders powering the next era of onchain lending, capital markets, FX, and payments. <br><a target="_blank" href="https://community.arc.io/home/events/ethglobal-cannes-hackathon-aejsg2lm44">Event Link</a>' },
+      { id:'e8', title:'ETHGlobal Pragma', date:'2026-04-02', lat:43.5505, lng:7.0180, city:'Cannes, France', image:'https://cdn.gradual.com/images/https://d2xo500swnpgl1.cloudfront.net/uploads/arc/pragma-banner-small-ff5746c2-5e80-4d05-88bf-081a574d90e9-1773768863482.jpeg?fit=scale-down&width=400', desc:'Catch the Circle team at ETHGlobal Pragma ahead of the hackathon. A different kind of event bringing together a small group of founders and builders to discuss the future of web3. Invite only, top founders, intimate discussions. Look for the Arc booth! <br><a target="_blank" href="https://community.arc.io/home/events/ethglobal-pragma-l7dy3xfft9">Event Link</a>' },
+      { id:'e9', title:'Arc x Encode Enterprise & DeFi ', date:'2026-02-27', lat:51.5290, lng:-0.0860, city:'London, UK', image:'https://cdn.gradual.com/images/https://d2xo500swnpgl1.cloudfront.net/uploads/arc/Arc-Hackathon-Banner--8fb64a84-5694-43f0-8c23-2e1d1d35d47a-1771513610657.jpeg?fit=scale-down&width=400', desc:'A weekend of onchain innovation across DeFi, enterprise finance, banking infrastructure, and programmable money on Arc. Hosted at Encode Hub \u2014 a 3-day IRL hackathon with hands-on mentorship and a $10,000 prize pool across multiple tracks. <br><a target="_blank" href="https://community.arc.io/home/events/arc-x-encode-enterprise-and-defi-hackathon-vcm38l2yye">Event Link</a>' },
+      { id:'e10', title:'Arc Side Quest at ETHDenver', date:'2026-02-18', lat:39.7596, lng:-104.9810, city:'Denver, USA', image:'https://cdn.gradual.com/images/https://d2xo500swnpgl1.cloudfront.net/uploads/arc/arcDenver-3b80d862-3b19-4363-90f2-8a817e9c6c55-1771096655696.jpeg?fit=scale-down&width=400', desc:'Arc: Side Quest brings together the Arc team, business leaders, builders, and more for an evening of conversation and connection at F1\u00ae Arcade Denver \u2014 high-speed F1\u00ae racing simulators, craft cocktails, and delicious bites. <br><a target="_blank" href="https://community.arc.io/home/events/arcdenver">Event Link</a>' },
+      { id:'e11', title:'Arc Meetup London Presentedb', date:'2026-02-12', lat:51.5291, lng:-0.0861, city:'London, UK', image:'https://cdn.gradual.com/images/https://d2xo500swnpgl1.cloudfront.net/uploads/arc/Arc-Meetup-Graphic-eea7cff4-7bb4-4e89-b96c-02ab92831e3c-1768863488772.jpeg?fit=scale-down&width=400', desc:'Before Arc DeFi Hackathon returns, join us at Encode Hub for an Arc Meetup \u2014 an evening for builders, founders, and DeFi teams curious about Arc and what\u2019s coming next. Ecosystem deep dive, meet the team, and hackathon prep. <br><a target="_blank" href="https://community.arc.io/home/events/arc-meetup-london-presented-by-encode-club-fxva111t6b">Event Link</a>' },
+      { id:'e12', title:'Arc Meetup San Francisco Presented', date:'2026-01-15', lat:37.8060, lng:-122.4320, city:'San Francisco, USA', image:'https://cdn.gradual.com/images/https://d2xo500swnpgl1.cloudfront.net/uploads/arc/1200x628-720-01a4f5d1-a779-40b0-a1e6-82f796bfff7d-1767806937513.jpeg?fit=scale-down&width=400', desc:'Join Thirdweb and Circle for an evening on Arc & blockchain interoperability. Live demos of Circle\u2019s interoperability stack (CCTP with Bridge Kit SDK, Gateway), funding opportunities, and a panel with Furqan Rydhan, Gianluca Minoprio, and Alokik Bhasin. <br><a target="_blank" href="https://community.arc.io/home/events/arc-meetup-san-francisco-presented-by-thirdweb-p621phpopg">Event Link</a>' },
+      { id:'e13', title:'Agentic Commerce on Arc ', date:'2026-01-09', lat:37.7634, lng:-122.4090, city:'San Francisco, USA', image:'https://cdn.gradual.com/images/https://d2xo500swnpgl1.cloudfront.net/uploads/arc/lablab-2b6ae8a7-a3c2-43f4-871c-8514e7ba29f8-1767893748123.jpeg?fit=scale-down&width=400', desc:'The second Arc x Circle hackathon \u2014 build agentic payment systems on Arc, the Economic OS for the Internet. Build with USDC as native gas on a stablecoin-first L1. January 9\u201324, 2026, online + on-site (Jan 23\u201324) in San Francisco. <br><a target="_blank" href="https://community.arc.io/home/events/agentic-commerce-on-arc-hackathon-hosted-by-lablab-ai">Event Link</a>' },
+      { id:'e14', title:'AI Agents on Arc with USDC', date:'2025-11-08', lat:40.7128, lng:-74.0060, city:'New York, USA', image:'https://cdn.gradual.com/images/https://d2xo500swnpgl1.cloudfront.net/uploads/arc/lablab-2b6ae8a7-a3c2-43f4-871c-8514e7ba29f8-1767893748123.jpeg?fit=scale-down&width=400', desc:'A global hybrid hackathon (Nov 8\u20139, 2025) powered by Arc, Circle, lablab.ai, ElevenLabs & Cloudflare. Build agentic payment solutions using Circle\u2019s USDC on the Arc blockchain. $10,000 in USDC rewards + professional mentorship. <br><a target="_blank" href="https://lablab.ai/event/ai-agents-arc-usdc">Event Link</a>' }
+    ];
+
+    const today = new Date();
+    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+    const isPast = (iso) => new Date(iso).getTime() < startOfToday.getTime();
+    const categoryOf = (iso) => (isPast(iso) ? 'past' : 'future');
+    const prettyDate = (iso) => new Date(iso).toLocaleDateString('en', {year:'numeric', month:'short', day:'numeric'});
+
+   
+const BASE_BOUNDS = L.latLngBounds(EVENTS.map(e => [e.lat, e.lng])).pad(0.35);
+
+const ne = BASE_BOUNDS.getNorthEast();
+const sw = BASE_BOUNDS.getSouthWest();
+const height = ne.lat - sw.lat;
+const extra = height * 5; 
+
+const EXPANDED_BOUNDS = L.latLngBounds(
+  L.latLng(sw.lat - extra, sw.lng), // further south
+  L.latLng(ne.lat + extra, ne.lng)  // further north
+);
+
+
+
+map.setMaxBounds(EXPANDED_BOUNDS);
+
+
+    function makeEventIcon(ev, stackCount){
+      const cat = categoryOf(ev.date);
+      const badge = stackCount && stackCount > 1
+        ? `<div class="stack-badge">+${stackCount - 1}</div>` : '';
+      const html = `
+        <div class="ev-marker ${cat}" role="img" aria-label="${ev.city}">
+          ${badge}
+          <div class="img-wrap">
+            <img class="img" src="${ev.image}" alt="${ev.title}">
+          </div>
+          <div class="city">${ev.city}</div>
+        </div>`;
+      return L.divIcon({
+        html,
+        className: "",
+        iconSize: [72, 78],
+        iconAnchor: [36, 74],
+        popupAnchor: [0, -72]
+      });
+    }
+
+    function singleEventPopupHTML(ev){
+      const cat = categoryOf(ev.date);
+      const mintSection = (cat === 'future') ? `
+          <div class="mint-section">
+            <button class="mint-btn" onclick="window.mintEventNFT('${ev.id}', this)">
+              <span class="ticket-icon">🎟️</span>
+              <span>Mint Ticket NFT</span>
+            </button>
+            <div class="mint-status" id="status-${ev.id}"></div>
+            <div class="mint-note">Free mint on Arc — just pay gas fee</div>
+          </div>` : '';
+      return `
+        <div class="popup" role="dialog" aria-label="${ev.title}">
+          <img src="${ev.image}" alt="${ev.title}">
+          <h3>${ev.title}</h3>
+          <div class="small">${ev.city} &middot; ${prettyDate(ev.date)}</div>
+          <div><span class="pill ${cat}">${cat==='past'?'Past':'Upcoming'}</span></div>
+          <div class="small">${ev.desc}</div>
+          ${mintSection}
+        </div>`;
+    }
+
+    function multiEventPopupHTML(events){
+      const items = events.map(ev => {
+        const cat = categoryOf(ev.date);
+        return `
+          <div class="mini-card" data-event-id="${ev.id}">
+            <img src="${ev.image}" alt="${ev.title}">
+            <div>
+              <div class="mini-title">${ev.title}</div>
+              <div class="mini-meta">
+                <span class="mini-pill ${cat}">${cat==='past'?'Past':'Upcoming'}</span>
+                <span>${prettyDate(ev.date)}</span>
+              </div>
+            </div>
+          </div>`;
+      }).join('');
+      return `
+        <div class="popup-multi" role="dialog">
+          <h4>${events.length} events in ${events[0].city}</h4>
+          ${items}
+        </div>`;
+    }
+
+    // ===== Group events by exact location =====
+    const locationGroups = new Map();
+    EVENTS.forEach(ev => {
+      const key = `${ev.lat.toFixed(4)},${ev.lng.toFixed(4)}`;
+      if(!locationGroups.has(key)) locationGroups.set(key, []);
+      locationGroups.get(key).push(ev);
+    });
+
+    // ===== Create cluster group for nearby (but not same-location) events =====
+    const clusterGroup = L.markerClusterGroup({
+      showCoverageOnHover: false,
+      spiderfyOnMaxZoom: true,
+      maxClusterRadius: 50,
+      iconCreateFunction: function(cluster){
+        const childMarkers = cluster.getAllChildMarkers();
+        let totalEvents = 0;
+        let pastCount = 0, futureCount = 0;
+        childMarkers.forEach(m => {
+          const evs = m._eventList || [];
+          evs.forEach(e => {
+            totalEvents++;
+            if(categoryOf(e.date) === 'past') pastCount++;
+            else futureCount++;
+          });
+        });
+        let cls = 'mixed';
+        if(pastCount === 0) cls = 'all-future';
+        else if(futureCount === 0) cls = 'all-past';
+        return L.divIcon({
+          html: `<div class="ev-cluster ${cls}">${totalEvents}<div class="count-badge">${childMarkers.length}</div></div>`,
+          className: 'marker-cluster-custom',
+          iconSize: [56, 56],
+          iconAnchor: [28, 28]
+        });
+      }
+    });
+
+    const markersById = new Map();
+    const markersByLocation = new Map();
+
+    locationGroups.forEach((evs, key) => {
+      // Use the most recent/upcoming event as the "face" of the stack
+      const sorted = [...evs].sort((a,b) => {
+        const aIsFuture = categoryOf(a.date) === 'future';
+        const bIsFuture = categoryOf(b.date) === 'future';
+        if(aIsFuture !== bIsFuture) return aIsFuture ? -1 : 1;
+        return new Date(b.date) - new Date(a.date);
+      });
+      const faceEv = sorted[0];
+
+      const marker = L.marker([faceEv.lat, faceEv.lng], {
+        icon: makeEventIcon(faceEv, evs.length)
+      });
+      marker._eventList = evs;
+
+      if(evs.length === 1){
+        marker.bindPopup(singleEventPopupHTML(faceEv), { maxWidth: 260 });
+      } else {
+        marker.bindPopup(multiEventPopupHTML(evs), { maxWidth: 320 });
+        marker.on('popupopen', () => {
+          document.querySelectorAll('.popup-multi .mini-card').forEach(card => {
+            card.addEventListener('click', () => {
+              const evId = card.getAttribute('data-event-id');
+              const ev = evs.find(e => e.id === evId);
+              if(ev){
+                // Show this specific event in its own popup
+                marker.unbindPopup();
+                marker.bindPopup(singleEventPopupHTML(ev), { maxWidth: 260 }).openPopup();
+                // Restore multi-event popup after close
+                marker.once('popupclose', () => {
+                  marker.unbindPopup();
+                  marker.bindPopup(multiEventPopupHTML(evs), { maxWidth: 320 });
+                });
+              }
+            });
+          });
+        });
+      }
+
+      clusterGroup.addLayer(marker);
+      markersByLocation.set(key, { marker, events: evs });
+      evs.forEach(ev => {
+        markersById.set(ev.id, { marker, data: ev, locationKey: key, allEvents: evs });
+      });
+    });
+
+    map.addLayer(clusterGroup);
+
+    const appEl  = document.getElementById('app');
+    const siteEl = document.getElementById('site');
+    const splashEl = document.getElementById('splash');
+    const panel  = document.getElementById('panel');
+    const toggle = document.getElementById('toggle');
+    const resetBtn = document.getElementById('reset');
+    const list   = document.getElementById('list');
+    const stats  = document.getElementById('stats');
+    const search = document.getElementById('search');
+    const btnAll    = document.getElementById('filter-all');
+    const btnFuture = document.getElementById('filter-future');
+    const btnPast   = document.getElementById('filter-past');
+
+    let activeFilter = 'all';
+    let query = '';
+
+    function updateToggleLabel(){
+      const isHidden = panel.classList.contains('hidden');
+      toggle.setAttribute('aria-pressed', isHidden ? 'true' : 'false');
+    }
+    function applyLayout(){
+      const isHidden = panel.classList.contains('hidden');
+      const isDesktop = window.matchMedia('(min-width: 981px)').matches;
+      appEl.classList.toggle('full', isHidden && isDesktop);
+      updateToggleLabel();
+      setTimeout(()=> map.invalidateSize(), 200);
+    }
+
+    function setFilter(f){
+      activeFilter = f;
+      btnAll.setAttribute('aria-pressed', f==='all');
+      btnFuture.setAttribute('aria-pressed', f==='future');
+      btnPast.setAttribute('aria-pressed', f==='past');
+      renderList();
+    }
+
+    function filtered(){
+      const q = query.trim().toLowerCase();
+      let arr = EVENTS.map(ev => ({ ...ev, category: categoryOf(ev.date) }));
+      if(activeFilter!=='all') arr = arr.filter(x=>x.category===activeFilter);
+      if(q){
+        arr = arr.filter(x=>
+          x.title.toLowerCase().includes(q) ||
+          x.city.toLowerCase().includes(q) ||
+          x.desc.toLowerCase().includes(q)
+        );
+      }
+      const now = startOfToday.getTime();
+      arr.sort((a,b)=>{
+        const da = new Date(a.date).getTime(), db = new Date(b.date).getTime();
+        const ap = da >= now ? 0 : 1;
+        const bp = db >= now ? 0 : 1;
+        if(ap!==bp) return ap-bp;
+        return ap===0 ? da-db : db-da;
+      });
+      return arr;
+    }
+
+    function renderList(){
+      const items = filtered();
+      list.innerHTML = '';
+      items.forEach(ev=>{
+        const el = document.createElement('div');
+        el.className = 'card';
+        el.setAttribute('role','listitem');
+        el.innerHTML = `
+          <img class="thumb" src="${ev.image}" alt="${ev.title}">
+          <div class="card-body">
+            <div class="title">${ev.title}</div>
+            <div class="meta">
+              <span>${ev.city}</span>
+              <span>•</span>
+              <span>${prettyDate(ev.date)}</span>
+            </div>
+            <div class="meta">
+              <span class="badge ${ev.category==='past'?'past':''}">${ev.category==='past'?'Past':'Upcoming'}</span>
+            </div>
+          </div>`;
+        el.addEventListener('click', ()=>{
+          const entry = markersById.get(ev.id);
+          if(!entry) return;
+          const { marker, allEvents } = entry;
+          const targetLatLng = marker.getLatLng();
+          // Zoom in enough to break out of clusters
+          map.flyTo(targetLatLng, Math.max(map.getZoom(), 11), { duration: .8 });
+          setTimeout(() => {
+            // Ask cluster group to reveal this marker if hidden in a cluster
+            clusterGroup.zoomToShowLayer(marker, () => {
+              if(allEvents.length === 1){
+                marker.openPopup();
+              } else {
+                // Open the multi popup, then auto-open the clicked event card
+                marker.openPopup();
+                setTimeout(() => {
+                  const card = document.querySelector(`.popup-multi .mini-card[data-event-id="${ev.id}"]`);
+                  if(card) card.click();
+                }, 200);
+              }
+            });
+          }, 850);
+        });
+        list.appendChild(el);
+      });
+      stats.textContent = `${items.length} event${items.length===1?'':'s'}`;
+
+      // Filter markers based on visible events
+      const visibleIds = new Set(items.map(x=>x.id));
+      const markersToShow = new Set();
+      markersByLocation.forEach(({ marker, events }) => {
+        const hasVisible = events.some(e => visibleIds.has(e.id));
+        if(hasVisible) markersToShow.add(marker);
+      });
+
+      clusterGroup.clearLayers();
+      markersToShow.forEach(m => clusterGroup.addLayer(m));
+    }
+
+    toggle.addEventListener('click', ()=>{
+      panel.classList.toggle('hidden');
+      applyLayout();
+    });
+    window.addEventListener('resize', applyLayout);
+
+    btnAll.addEventListener('click', ()=> setFilter('all'));
+    btnFuture.addEventListener('click', ()=> setFilter('future'));
+    btnPast.addEventListener('click', ()=> setFilter('past'));
+    search.addEventListener('input', (e)=>{ query = e.target.value; renderList(); });
+
+    function isAtDefault(){
+      const c = map.getCenter(); const z = map.getZoom(); const tol = 0.0005;
+      return Math.abs(c.lat - DEFAULT_CENTER[0]) < tol &&
+             Math.abs(c.lng - DEFAULT_CENTER[1]) < tol &&
+             Math.abs(z - DEFAULT_ZOOM) < 0.01;
+    }
+    function updateResetButton(){ isAtDefault() ? resetBtn.classList.add('hidden') : resetBtn.classList.remove('hidden'); }
+    resetBtn.addEventListener('click', ()=> map.flyTo(DEFAULT_CENTER, DEFAULT_ZOOM, { duration: 0.8 }));
+    map.on('moveend zoomend', updateResetButton);
+    updateResetButton();
+
+    document.addEventListener('keydown', (e) => {
+      const inTextField =
+        ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName) ||
+        document.activeElement.isContentEditable;
+
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'l') {
+        e.preventDefault(); toggle.click(); return;
+      }
+      if ((e.ctrlKey || e.metaKey) && (e.key === '0' || e.key === 'Escape' || e.code === 'Digit0')) {
+        e.preventDefault(); resetBtn.click(); return;
+      }
+      if (e.key === 'Backspace' && !inTextField) { e.preventDefault(); }
+    });
+
+    function endSplash(){
+      splashEl.classList.add('fade-out');
+      setTimeout(()=>{
+        splashEl.style.display = 'none';
+        siteEl.style.display = 'block';
+        siteEl.setAttribute('aria-hidden','false');
+        renderList();
+        applyLayout();
+      }, 500);
+    }
+
+    window.addEventListener('load', ()=>{
+      setTimeout(endSplash, SPLASH_DURATION);
+    });
+  </script>
+
+  <!-- ============================================
+       Web3 / Arc Mint Logic
+       ============================================ -->
+  <script type="module">
+    import { 
+      createWalletClient, 
+      createPublicClient, 
+      custom, 
+      http, 
+      defineChain 
+    } from 'https://esm.sh/viem@2.21.0';
+
+    // ===== تنظیمات - بعد از deploy این مقادیر را تنظیم کن =====
+    const CONTRACT_ADDRESS = '0xBbfd72D1c3033F185e75023e78F33bc1419b2E22';
+    
+    // map از event id رشته‌ای (e1, e2...) به عدد قرارداد
+    // فقط event های آینده اینجا میان
+    // الان فقط e1 (ETHGlobal New York 2026) آینده است
+    const EVENT_ID_MAP = {
+      'e1': 1,
+      // وقتی event آینده جدید اضافه کردی، اینجا هم اضافه کن:
+      // 'e15': 2,
+      // 'e16': 3,
+    };
+    // ==========================================================
+
+    const arcTestnet = defineChain({
+      id: 5042002,
+      name: 'Arc Testnet',
+      nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 18 },
+      rpcUrls: { default: { http: ['https://rpc.testnet.arc.network'] } },
+      blockExplorers: { 
+        default: { name: 'Arcscan', url: 'https://testnet.arcscan.app' } 
+      },
+    });
+
+    const ABI = [
+      { 
+        type: 'function', 
+        name: 'claim', 
+        inputs: [{ name: 'eventId', type: 'uint256' }], 
+        outputs: [], 
+        stateMutability: 'nonpayable' 
+      },
+      { 
+        type: 'function', 
+        name: 'hasMinted', 
+        inputs: [
+          { name: '', type: 'uint256' }, 
+          { name: '', type: 'address' }
+        ], 
+        outputs: [{ type: 'bool' }], 
+        stateMutability: 'view' 
+      },
+      { 
+        type: 'function', 
+        name: 'eventActive', 
+        inputs: [{ name: '', type: 'uint256' }], 
+        outputs: [{ type: 'bool' }], 
+        stateMutability: 'view' 
+      },
+    ];
+
+    let walletClient = null;
+    let userAddress = null;
+    const publicClient = createPublicClient({ 
+      chain: arcTestnet, 
+      transport: http() 
+    });
+
+    const ARC_CHAIN_ID_HEX = '0x4CF812'; // 5042002 in hex
+
+    async function ensureArcNetwork() {
+      try {
+        await window.ethereum.request({
+          method: 'wallet_switchEthereumChain',
+          params: [{ chainId: ARC_CHAIN_ID_HEX }]
+        });
+      } catch (e) {
+        if (e.code === 4902) {
+          await window.ethereum.request({
+            method: 'wallet_addEthereumChain',
+            params: [{
+              chainId: ARC_CHAIN_ID_HEX,
+              chainName: 'Arc Testnet',
+              nativeCurrency: { name: 'USDC', symbol: 'USDC', decimals: 18 },
+              rpcUrls: ['https://rpc.testnet.arc.network'],
+              blockExplorerUrls: ['https://testnet.arcscan.app']
+            }]
+          });
+        } else {
+          throw e;
+        }
+      }
+    }
+
+    function updateWalletBtn() {
+      const btn = document.getElementById('walletBtn');
+      if (userAddress) {
+        btn.textContent = userAddress.slice(0, 6) + '...' + userAddress.slice(-4);
+        btn.classList.add('connected');
+      } else {
+        btn.textContent = 'Connect Wallet';
+        btn.classList.remove('connected');
+      }
+    }
+
+    window.connectWallet = async function() {
+      if (!window.ethereum) {
+        alert('Please install MetaMask first: https://metamask.io');
+        return;
+      }
+      
+      try {
+        walletClient = createWalletClient({ 
+          chain: arcTestnet, 
+          transport: custom(window.ethereum) 
+        });
+        const [addr] = await walletClient.requestAddresses();
+        userAddress = addr;
+        
+        await ensureArcNetwork();
+        updateWalletBtn();
+        
+        // اگه کاربر account رو عوض کرد
+        window.ethereum.on('accountsChanged', (accounts) => {
+          if (accounts.length === 0) {
+            userAddress = null;
+          } else {
+            userAddress = accounts[0];
+          }
+          updateWalletBtn();
+        });
+        
+        return addr;
+      } catch (err) {
+        console.error('Connect error:', err);
+        alert('Error connecting wallet: ' + (err.shortMessage || err.message));
+      }
+    };
+
+    window.mintEventNFT = async function(eventStringId, buttonEl) {
+      const statusEl = document.getElementById('status-' + eventStringId);
+      const setStatus = (msg, type='') => {
+        if (statusEl) {
+          statusEl.textContent = msg;
+          statusEl.className = 'mint-status ' + type;
+        }
+      };
+
+      if (!userAddress) {
+        await window.connectWallet();
+        if (!userAddress) return;
+      }
+
+      const eventId = EVENT_ID_MAP[eventStringId];
+      if (!eventId) {
+        setStatus('Event not registered for minting', 'error');
+        return;
+      }
+
+      if (CONTRACT_ADDRESS === '0xYOUR_CONTRACT_ADDRESS_HERE') {
+        setStatus('Contract address not configured yet', 'error');
+        return;
+      }
+
+      try {
+        buttonEl.disabled = true;
+        setStatus('Checking eligibility...', '');
+
+        // چک کن event فعال هست
+        const isActive = await publicClient.readContract({
+          address: CONTRACT_ADDRESS, 
+          abi: ABI, 
+          functionName: 'eventActive',
+          args: [BigInt(eventId)]
+        });
+        if (!isActive) {
+          setStatus('This event is not active yet', 'error');
+          buttonEl.disabled = false;
+          return;
+        }
+
+        // چک کن قبلاً mint نکرده باشه
+        const already = await publicClient.readContract({
+          address: CONTRACT_ADDRESS, 
+          abi: ABI, 
+          functionName: 'hasMinted',
+          args: [BigInt(eventId), userAddress]
+        });
+        if (already) {
+          setStatus('You already have this ticket ✓', 'success');
+          buttonEl.querySelector('span:last-child').textContent = 'Already Minted';
+          return;
+        }
+
+        // mint
+        setStatus('Please confirm in MetaMask...', '');
+        const hash = await walletClient.writeContract({
+          address: CONTRACT_ADDRESS,
+          abi: ABI,
+          functionName: 'claim',
+          args: [BigInt(eventId)],
+          account: userAddress
+        });
+
+        setStatus('Confirming on Arc...', '');
+        await publicClient.waitForTransactionReceipt({ hash });
+        
+        setStatus('🎉 Ticket NFT minted successfully!', 'success');
+        buttonEl.querySelector('span:last-child').textContent = 'Minted ✓';
+
+      } catch (err) {
+        console.error('Mint error:', err);
+        const msg = err.shortMessage || err.message || 'Unknown error';
+        if (msg.includes('Already minted')) {
+          setStatus('You already minted this ticket', 'error');
+          buttonEl.querySelector('span:last-child').textContent = 'Already Minted';
+        } else if (msg.includes('User rejected') || msg.includes('User denied')) {
+          setStatus('Transaction cancelled', 'error');
+          buttonEl.disabled = false;
+        } else {
+          setStatus('Error: ' + msg.slice(0, 80), 'error');
+          buttonEl.disabled = false;
+        }
+      }
+    };
+
+    // اگه قبلاً وصل بوده، خودکار وصل شو
+    if (window.ethereum && window.ethereum.selectedAddress) {
+      window.connectWallet();
+    }
+  </script>
+</body>
+</html>
